@@ -1,22 +1,27 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import api from "../api";
 
 export default function ChatPage() {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState("");
+    const bottomRef = useRef(null);
     const roomId = 1;
 
     useEffect(() => {
         loadMessages();
     }, []);
 
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
     async function loadMessages() {
         try {
             const res = await api.get(`/api/messages/${roomId}`);
             setMessages(res.data);
         } catch (error) {
-            console.error("Load messages failed:", error);
+            console.error(error);
         }
     }
 
@@ -30,48 +35,126 @@ export default function ChatPage() {
             setMessageText("");
             loadMessages();
         } catch (error) {
-            console.error("Send message failed:", error);
+            console.error(error);
         }
     }
 
     return (
-        <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-            <h1>Live Chat Application</h1>
-            <h2>Chat Page</h2>
-            <p>Welcome, {user?.username || "User"}</p>
-
-            <h3>Room: General</h3>
-
-            <div
-                style={{
-                    border: "1px solid #ccc",
-                    padding: "10px",
-                    minHeight: "200px",
-                    marginBottom: "10px"
-                }}
-            >
-                {messages.length === 0 ? (
-                    <p>No messages yet.</p>
-                ) : (
-                    messages.map((msg) => (
-                        <div key={msg.id || msg.Id} style={{ marginBottom: "8px" }}>
-                            <strong>{msg.username || msg.Username}: </strong>
-                            <span>{msg.messageText || msg.MessageText}</span>
-                        </div>
-                    ))
-                )}
+        <div style={styles.container}>
+            <div style={styles.header}>
+                <h2>💬 Live Chat</h2>
+                <span>Welcome, {user?.username}</span>
             </div>
 
-            <input
-                type="text"
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Type a message"
-                style={{ width: "70%", padding: "8px", marginRight: "10px" }}
-            />
-            <button onClick={handleSend} style={{ padding: "8px 16px" }}>
-                Send
-            </button>
+            <div style={styles.chatBox}>
+                {messages.length === 0 ? (
+                    <p style={{ color: "#888" }}>No messages yet</p>
+                ) : (
+                    messages.map((msg) => {
+                        const isMe =
+                            (msg.username || msg.Username) === user?.username;
+
+                        return (
+                            <div
+                                key={msg.id || msg.Id}
+                                style={{
+                                    ...styles.message,
+                                    alignSelf: isMe
+                                        ? "flex-end"
+                                        : "flex-start",
+                                    backgroundColor: isMe
+                                        ? "#4CAF50"
+                                        : "#e5e5ea",
+                                    color: isMe ? "white" : "black"
+                                }}
+                            >
+                                {!isMe && (
+                                    <div style={styles.username}>
+                                        {msg.username || msg.Username}
+                                    </div>
+                                )}
+                                <div>
+                                    {msg.messageText || msg.MessageText}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+                <div ref={bottomRef} />
+            </div>
+
+            <div style={styles.inputArea}>
+                <input
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder="Type a message..."
+                    style={styles.input}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                />
+                <button onClick={handleSend} style={styles.button}>
+                    Send
+                </button>
+            </div>
         </div>
     );
 }
+
+const styles = {
+    container: {
+        maxWidth: "600px",
+        margin: "40px auto",
+        border: "1px solid #ddd",
+        borderRadius: "12px",
+        display: "flex",
+        flexDirection: "column",
+        height: "80vh",
+        fontFamily: "Arial"
+    },
+    header: {
+        padding: "15px",
+        borderBottom: "1px solid #eee",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+    },
+    chatBox: {
+        flex: 1,
+        padding: "15px",
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        background: "#fafafa"
+    },
+    message: {
+        padding: "10px 14px",
+        borderRadius: "16px",
+        maxWidth: "70%",
+        wordBreak: "break-word"
+    },
+    username: {
+        fontSize: "12px",
+        opacity: 0.7,
+        marginBottom: "4px"
+    },
+    inputArea: {
+        display: "flex",
+        padding: "10px",
+        borderTop: "1px solid #eee",
+        gap: "10px"
+    },
+    input: {
+        flex: 1,
+        padding: "10px",
+        borderRadius: "8px",
+        border: "1px solid #ccc"
+    },
+    button: {
+        padding: "10px 16px",
+        border: "none",
+        borderRadius: "8px",
+        backgroundColor: "#4CAF50",
+        color: "white",
+        cursor: "pointer"
+    }
+};

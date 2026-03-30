@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-    baseURL: "http://localhost:5001"
+    baseURL: "https://live-chat-api-hzcdd4evhwfpbue9.westus3-01.azurewebsites.net"
 });
 
 api.interceptors.request.use((config) => {

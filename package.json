@@ -1,0 +1,22 @@
+{
+    "name": "livechat-frontend",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "start": "vite"
+    },
+    "dependencies": {
+        "axios": "^1.14.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "react-router-dom": "^7.13.2",
+        "socket.io-client": "^4.8.1"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.4.1",
+        "vite": "^6.2.1"
+    }
+}

@@ -2,9 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import api from "../api";
 
-const SOCKET_ENDPOINT = "https://livechatapp.webpubsub.azure.com";
-const SOCKET_PATH = "/clients/socketio/hubs/livechatapp";
-
 export default function ChatPage() {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     const [messages, setMessages] = useState([]);
@@ -19,28 +16,41 @@ export default function ChatPage() {
     }, []);
 
     useEffect(() => {
-        socketRef.current = io(SOCKET_ENDPOINT, {
-            path: SOCKET_PATH,
-            transports: ["websocket", "polling"]
-        });
+        async function connectSocket() {
+            try {
+                const res = await api.get("/api/socket");
 
-        socketRef.current.on("connect", () => {
-            console.log("socket connected:", socketRef.current.id);
-            socketRef.current.emit("join-room", roomId);
-        });
+                socketRef.current = io(res.data.endpoint, {
+                    path: res.data.path,
+                    query: {
+                        access_token: res.data.token
+                    },
+                    transports: ["websocket", "polling"]
+                });
 
-        socketRef.current.on("new-message", (msg) => {
-            setMessages((prev) => {
-                const exists = prev.some(
-                    (m) => (m.id || m.Id) === (msg.id || msg.Id)
-                );
-                return exists ? prev : [...prev, msg];
-            });
-        });
+                socketRef.current.on("connect", () => {
+                    console.log("socket connected:", socketRef.current.id);
+                    socketRef.current.emit("join-room", roomId);
+                });
 
-        socketRef.current.on("connect_error", (err) => {
-            console.error("socket connect error:", err.message);
-        });
+                socketRef.current.on("new-message", (msg) => {
+                    setMessages((prev) => {
+                        const exists = prev.some(
+                            (m) => (m.id || m.Id) === (msg.id || msg.Id)
+                        );
+                        return exists ? prev : [...prev, msg];
+                    });
+                });
+
+                socketRef.current.on("connect_error", (err) => {
+                    console.error("socket connect error:", err.message);
+                });
+            } catch (err) {
+                console.error("socket setup failed:", err);
+            }
+        }
+
+        connectSocket();
 
         return () => {
             socketRef.current?.emit("leave-room", roomId);

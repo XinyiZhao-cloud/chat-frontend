@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
 import api from "../api";
 
 export default function ChatPage() {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState("");
+    const [loading, setLoading] = useState(true);
     const bottomRef = useRef(null);
+    const socketRef = useRef(null);
     const roomId = 1;
 
     useEffect(() => {
@@ -13,15 +16,38 @@ export default function ChatPage() {
     }, []);
 
     useEffect(() => {
+        socketRef.current = io(
+            "https://live-chat-api-hzcdd4evhwfpbue9.westus3-01.azurewebsites.net",
+            {
+                transports: ["websocket"]
+            }
+        );
+
+        socketRef.current.emit("join-room", roomId);
+
+        socketRef.current.on("new-message", (msg) => {
+            setMessages((prev) => [...prev, msg]);
+        });
+
+        return () => {
+            socketRef.current?.emit("leave-room", roomId);
+            socketRef.current?.disconnect();
+        };
+    }, [roomId]);
+
+    useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     async function loadMessages() {
         try {
+            setLoading(true);
             const res = await api.get(`/api/messages/${roomId}`);
             setMessages(res.data);
         } catch (error) {
-            console.error(error);
+            console.error("Load messages failed:", error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -33,128 +59,417 @@ export default function ChatPage() {
                 messageText
             });
             setMessageText("");
-            loadMessages();
         } catch (error) {
-            console.error(error);
+            console.error("Send message failed:", error);
         }
     }
 
+    function formatTime(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        return date.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit"
+        });
+    }
+
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h2>💬 Live Chat</h2>
-                <span>Welcome, {user?.username}</span>
-            </div>
+        <div style={styles.page}>
+            <div style={styles.appShell}>
+                <aside style={styles.sidebar}>
+                    <div style={styles.brandBlock}>
+                        <div style={styles.brandIcon}>💬</div>
+                        <div>
+                            <div style={styles.brandTitle}>Live Chat</div>
+                            <div style={styles.brandSubtitle}>Cloud Demo App</div>
+                        </div>
+                    </div>
 
-            <div style={styles.chatBox}>
-                {messages.length === 0 ? (
-                    <p style={{ color: "#888" }}>No messages yet</p>
-                ) : (
-                    messages.map((msg) => {
-                        const isMe =
-                            (msg.username || msg.Username) === user?.username;
+                    <div style={styles.sectionLabel}>Rooms</div>
+                    <div style={styles.roomCardActive}>
+                        <div style={styles.roomAvatar}>G</div>
+                        <div>
+                            <div style={styles.roomName}>General</div>
+                            <div style={styles.roomMeta}>Main discussion room</div>
+                        </div>
+                    </div>
 
-                        return (
-                            <div
-                                key={msg.id || msg.Id}
-                                style={{
-                                    ...styles.message,
-                                    alignSelf: isMe
-                                        ? "flex-end"
-                                        : "flex-start",
-                                    backgroundColor: isMe
-                                        ? "#4CAF50"
-                                        : "#e5e5ea",
-                                    color: isMe ? "white" : "black"
-                                }}
-                            >
-                                {!isMe && (
-                                    <div style={styles.username}>
-                                        {msg.username || msg.Username}
-                                    </div>
-                                )}
-                                <div>
-                                    {msg.messageText || msg.MessageText}
+                    <div style={styles.sidebarFooter}>
+                        <div style={styles.userBadge}>
+                            <div style={styles.userAvatar}>
+                                {(user?.username || "U").charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <div style={styles.userName}>
+                                    {user?.username || "User"}
+                                </div>
+                                <div style={styles.userStatus}>Online</div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <main style={styles.chatPanel}>
+                    <div style={styles.chatHeader}>
+                        <div>
+                            <div style={styles.chatTitle}>General</div>
+                            <div style={styles.chatSubtitle}>
+                                Team conversation
+                            </div>
+                        </div>
+                        <button onClick={loadMessages} style={styles.refreshButton}>
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div style={styles.messagesArea}>
+                        {loading ? (
+                            <div style={styles.emptyState}>Loading messages...</div>
+                        ) : messages.length === 0 ? (
+                            <div style={styles.emptyState}>
+                                <div style={styles.emptyEmoji}>👋</div>
+                                <div style={styles.emptyTitle}>No messages yet</div>
+                                <div style={styles.emptyText}>
+                                    Start the conversation in General.
                                 </div>
                             </div>
-                        );
-                    })
-                )}
-                <div ref={bottomRef} />
-            </div>
+                        ) : (
+                            messages.map((msg) => {
+                                const username = msg.username || msg.Username;
+                                const text = msg.messageText || msg.MessageText;
+                                const createdAt = msg.createdAt || msg.CreatedAt;
+                                const isMe = username === user?.username;
 
-            <div style={styles.inputArea}>
-                <input
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    placeholder="Type a message..."
-                    style={styles.input}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                />
-                <button onClick={handleSend} style={styles.button}>
-                    Send
-                </button>
+                                return (
+                                    <div
+                                        key={msg.id || msg.Id}
+                                        style={{
+                                            ...styles.messageRow,
+                                            justifyContent: isMe
+                                                ? "flex-end"
+                                                : "flex-start"
+                                        }}
+                                    >
+                                        {!isMe && (
+                                            <div style={styles.messageAvatar}>
+                                                {username?.charAt(0).toUpperCase() || "U"}
+                                            </div>
+                                        )}
+
+                                        <div
+                                            style={{
+                                                ...styles.messageBubbleWrap,
+                                                alignItems: isMe
+                                                    ? "flex-end"
+                                                    : "flex-start"
+                                            }}
+                                        >
+                                            {!isMe && (
+                                                <div style={styles.messageSender}>
+                                                    {username}
+                                                </div>
+                                            )}
+
+                                            <div
+                                                style={{
+                                                    ...styles.messageBubble,
+                                                    ...(isMe
+                                                        ? styles.myBubble
+                                                        : styles.otherBubble)
+                                                }}
+                                            >
+                                                {text}
+                                            </div>
+
+                                            <div style={styles.messageTime}>
+                                                {formatTime(createdAt)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                        <div ref={bottomRef} />
+                    </div>
+
+                    <div style={styles.inputBar}>
+                        <input
+                            type="text"
+                            value={messageText}
+                            onChange={(e) => setMessageText(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                            placeholder="Write a message..."
+                            style={styles.input}
+                        />
+                        <button onClick={handleSend} style={styles.sendButton}>
+                            Send
+                        </button>
+                    </div>
+                </main>
             </div>
         </div>
     );
 }
 
 const styles = {
-    container: {
-        maxWidth: "600px",
-        margin: "40px auto",
-        border: "1px solid #ddd",
-        borderRadius: "12px",
+    page: {
+        minHeight: "100vh",
+        background:
+            "linear-gradient(135deg, #eef2ff 0%, #f8fafc 45%, #f1f5f9 100%)",
+        padding: "24px",
+        fontFamily:
+            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    },
+    appShell: {
+        maxWidth: "1200px",
+        height: "88vh",
+        margin: "0 auto",
+        backgroundColor: "#ffffff",
+        borderRadius: "24px",
+        overflow: "hidden",
+        display: "grid",
+        gridTemplateColumns: "280px 1fr",
+        boxShadow: "0 20px 60px rgba(15, 23, 42, 0.12)",
+        border: "1px solid #e2e8f0"
+    },
+    sidebar: {
+        background:
+            "linear-gradient(180deg, #0f172a 0%, #111827 55%, #172554 100%)",
+        color: "#ffffff",
+        padding: "24px 18px",
         display: "flex",
         flexDirection: "column",
-        height: "80vh",
-        fontFamily: "Arial"
+        justifyContent: "space-between"
     },
-    header: {
-        padding: "15px",
-        borderBottom: "1px solid #eee",
+    brandBlock: {
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center"
+        alignItems: "center",
+        gap: "14px",
+        marginBottom: "28px"
     },
-    chatBox: {
-        flex: 1,
-        padding: "15px",
-        overflowY: "auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-        background: "#fafafa"
-    },
-    message: {
-        padding: "10px 14px",
+    brandIcon: {
+        width: "48px",
+        height: "48px",
         borderRadius: "16px",
-        maxWidth: "70%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(255,255,255,0.12)",
+        fontSize: "22px"
+    },
+    brandTitle: {
+        fontSize: "20px",
+        fontWeight: 700
+    },
+    brandSubtitle: {
+        fontSize: "13px",
+        color: "rgba(255,255,255,0.7)"
+    },
+    sectionLabel: {
+        fontSize: "12px",
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        color: "rgba(255,255,255,0.5)",
+        marginBottom: "12px"
+    },
+    roomCardActive: {
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "14px",
+        borderRadius: "18px",
+        background: "rgba(255,255,255,0.12)",
+        border: "1px solid rgba(255,255,255,0.08)"
+    },
+    roomAvatar: {
+        width: "42px",
+        height: "42px",
+        borderRadius: "14px",
+        background: "#38bdf8",
+        color: "#082f49",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700
+    },
+    roomName: {
+        fontSize: "15px",
+        fontWeight: 700
+    },
+    roomMeta: {
+        fontSize: "12px",
+        color: "rgba(255,255,255,0.7)"
+    },
+    sidebarFooter: {
+        marginTop: "24px"
+    },
+    userBadge: {
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "14px",
+        borderRadius: "18px",
+        background: "rgba(255,255,255,0.08)"
+    },
+    userAvatar: {
+        width: "42px",
+        height: "42px",
+        borderRadius: "50%",
+        background: "#c4b5fd",
+        color: "#312e81",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        fontSize: "16px"
+    },
+    userName: {
+        fontSize: "14px",
+        fontWeight: 700
+    },
+    userStatus: {
+        fontSize: "12px",
+        color: "#86efac"
+    },
+    chatPanel: {
+        display: "flex",
+        flexDirection: "column",
+        background: "#f8fafc"
+    },
+    chatHeader: {
+        padding: "22px 24px",
+        borderBottom: "1px solid #e2e8f0",
+        background: "rgba(255,255,255,0.9)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+    },
+    chatTitle: {
+        fontSize: "24px",
+        fontWeight: 800,
+        color: "#0f172a"
+    },
+    chatSubtitle: {
+        fontSize: "14px",
+        color: "#64748b",
+        marginTop: "4px"
+    },
+    refreshButton: {
+        border: "1px solid #cbd5e1",
+        background: "#ffffff",
+        color: "#0f172a",
+        borderRadius: "12px",
+        padding: "10px 14px",
+        fontWeight: 600,
+        cursor: "pointer"
+    },
+    messagesArea: {
+        flex: 1,
+        overflowY: "auto",
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        background:
+            "radial-gradient(circle at top, rgba(191,219,254,0.25), transparent 35%), #f8fafc"
+    },
+    emptyState: {
+        margin: "auto",
+        textAlign: "center",
+        color: "#64748b"
+    },
+    emptyEmoji: {
+        fontSize: "34px",
+        marginBottom: "10px"
+    },
+    emptyTitle: {
+        fontSize: "18px",
+        fontWeight: 700,
+        color: "#334155",
+        marginBottom: "6px"
+    },
+    emptyText: {
+        fontSize: "14px"
+    },
+    messageRow: {
+        display: "flex",
+        gap: "10px"
+    },
+    messageAvatar: {
+        width: "38px",
+        height: "38px",
+        borderRadius: "50%",
+        background: "#dbeafe",
+        color: "#1d4ed8",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        flexShrink: 0,
+        marginTop: "4px"
+    },
+    messageBubbleWrap: {
+        display: "flex",
+        flexDirection: "column",
+        maxWidth: "72%"
+    },
+    messageSender: {
+        fontSize: "12px",
+        fontWeight: 700,
+        color: "#64748b",
+        marginBottom: "6px",
+        marginLeft: "4px"
+    },
+    messageBubble: {
+        padding: "12px 16px",
+        borderRadius: "18px",
+        fontSize: "15px",
+        lineHeight: 1.45,
+        boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
         wordBreak: "break-word"
     },
-    username: {
-        fontSize: "12px",
-        opacity: 0.7,
-        marginBottom: "4px"
+    myBubble: {
+        background: "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)",
+        color: "#ffffff",
+        borderBottomRightRadius: "6px"
     },
-    inputArea: {
+    otherBubble: {
+        background: "#ffffff",
+        color: "#0f172a",
+        border: "1px solid #e2e8f0",
+        borderBottomLeftRadius: "6px"
+    },
+    messageTime: {
+        fontSize: "11px",
+        color: "#94a3b8",
+        marginTop: "6px",
+        padding: "0 4px"
+    },
+    inputBar: {
+        padding: "18px 20px",
+        borderTop: "1px solid #e2e8f0",
+        background: "#ffffff",
         display: "flex",
-        padding: "10px",
-        borderTop: "1px solid #eee",
-        gap: "10px"
+        gap: "12px"
     },
     input: {
         flex: 1,
-        padding: "10px",
-        borderRadius: "8px",
-        border: "1px solid #ccc"
+        borderRadius: "14px",
+        border: "1px solid #cbd5e1",
+        background: "#f8fafc",
+        padding: "14px 16px",
+        fontSize: "15px",
+        outline: "none"
     },
-    button: {
-        padding: "10px 16px",
+    sendButton: {
         border: "none",
-        borderRadius: "8px",
-        backgroundColor: "#4CAF50",
-        color: "white",
-        cursor: "pointer"
+        borderRadius: "14px",
+        background: "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)",
+        color: "#ffffff",
+        padding: "0 22px",
+        fontWeight: 700,
+        fontSize: "15px",
+        cursor: "pointer",
+        boxShadow: "0 10px 24px rgba(79, 70, 229, 0.24)"
     }
 };

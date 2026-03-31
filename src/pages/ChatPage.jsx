@@ -7,7 +7,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState("");
     const [loading, setLoading] = useState(true);
-    const bottomRef = useRef(null);
+    const messagesAreaRef = useRef(null);
     const socketRef = useRef(null);
     const roomId = 1;
 
@@ -58,8 +58,12 @@ export default function ChatPage() {
         };
     }, [roomId]);
 
+
+
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (messagesAreaRef.current) {
+            messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+        }
     }, [messages]);
 
     async function loadMessages() {
@@ -145,7 +149,7 @@ export default function ChatPage() {
                         </button>
                     </div>
 
-                    <div style={styles.messagesArea}>
+                    <div ref={messagesAreaRef} style={styles.messagesArea}>
                         {loading ? (
                             <div style={styles.emptyState}>
                                 <div style={styles.emptyTitle}>Loading messages...</div>
@@ -209,7 +213,6 @@ export default function ChatPage() {
                             })
                         )}
 
-                        <div ref={bottomRef} />
                     </div>
 
                     <div style={styles.inputBar}>

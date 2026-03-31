@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import api from "../api";
 
+const SOCKET_ENDPOINT = "https://YOUR-WEBPUBSUB-ENDPOINT";
+const SOCKET_PATH = "/clients/socketio/hubs/livechat";
+
 export default function ChatPage() {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     const [messages, setMessages] = useState([]);
@@ -16,17 +19,22 @@ export default function ChatPage() {
     }, []);
 
     useEffect(() => {
-        socketRef.current = io(
-            "https://live-chat-api-hzcdd4evhwfpbue9.westus3-01.azurewebsites.net",
-            {
-                transports: ["websocket"]
-            }
-        );
+        socketRef.current = io(SOCKET_ENDPOINT, {
+            path: SOCKET_PATH,
+            transports: ["websocket", "polling"],
+        });
 
-        socketRef.current.emit("join-room", roomId);
+        socketRef.current.on("connect", () => {
+            console.log("socket connected", socketRef.current.id);
+            socketRef.current.emit("join-room", roomId);
+        });
 
         socketRef.current.on("new-message", (msg) => {
             setMessages((prev) => [...prev, msg]);
+        });
+
+        socketRef.current.on("connect_error", (err) => {
+            console.error("socket connect error:", err.message);
         });
 
         return () => {
@@ -53,164 +61,33 @@ export default function ChatPage() {
 
     async function handleSend() {
         if (!messageText.trim()) return;
-
         try {
-            await api.post(`/api/messages/${roomId}`, {
-                messageText
-            });
+            await api.post(`/api/messages/${roomId}`, { messageText });
             setMessageText("");
         } catch (error) {
             console.error("Send message failed:", error);
         }
     }
 
-    function formatTime(value) {
-        if (!value) return "";
-        const date = new Date(value);
-        return date.toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit"
-        });
-    }
-
     return (
-        <div style={styles.page}>
-            <div style={styles.appShell}>
-                <aside style={styles.sidebar}>
-                    <div style={styles.brandBlock}>
-                        <div style={styles.brandIcon}>💬</div>
-                        <div>
-                            <div style={styles.brandTitle}>Live Chat</div>
-                            <div style={styles.brandSubtitle}>Cloud Demo App</div>
-                        </div>
-                    </div>
-
-                    <div style={styles.sectionLabel}>Rooms</div>
-                    <div style={styles.roomCardActive}>
-                        <div style={styles.roomAvatar}>G</div>
-                        <div>
-                            <div style={styles.roomName}>General</div>
-                            <div style={styles.roomMeta}>Main discussion room</div>
-                        </div>
-                    </div>
-
-                    <div style={styles.sidebarFooter}>
-                        <div style={styles.userBadge}>
-                            <div style={styles.userAvatar}>
-                                {(user?.username || "U").charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                                <div style={styles.userName}>
-                                    {user?.username || "User"}
-                                </div>
-                                <div style={styles.userStatus}>Online</div>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
-
-                <main style={styles.chatPanel}>
-                    <div style={styles.chatHeader}>
-                        <div>
-                            <div style={styles.chatTitle}>General</div>
-                            <div style={styles.chatSubtitle}>
-                                Team conversation
-                            </div>
-                        </div>
-                        <button onClick={loadMessages} style={styles.refreshButton}>
-                            Refresh
-                        </button>
-                    </div>
-
-                    <div style={styles.messagesArea}>
-                        {loading ? (
-                            <div style={styles.emptyState}>Loading messages...</div>
-                        ) : messages.length === 0 ? (
-                            <div style={styles.emptyState}>
-                                <div style={styles.emptyEmoji}>👋</div>
-                                <div style={styles.emptyTitle}>No messages yet</div>
-                                <div style={styles.emptyText}>
-                                    Start the conversation in General.
-                                </div>
-                            </div>
-                        ) : (
-                            messages.map((msg) => {
-                                const username = msg.username || msg.Username;
-                                const text = msg.messageText || msg.MessageText;
-                                const createdAt = msg.createdAt || msg.CreatedAt;
-                                const isMe = username === user?.username;
-
-                                return (
-                                    <div
-                                        key={msg.id || msg.Id}
-                                        style={{
-                                            ...styles.messageRow,
-                                            justifyContent: isMe
-                                                ? "flex-end"
-                                                : "flex-start"
-                                        }}
-                                    >
-                                        {!isMe && (
-                                            <div style={styles.messageAvatar}>
-                                                {username?.charAt(0).toUpperCase() || "U"}
-                                            </div>
-                                        )}
-
-                                        <div
-                                            style={{
-                                                ...styles.messageBubbleWrap,
-                                                alignItems: isMe
-                                                    ? "flex-end"
-                                                    : "flex-start"
-                                            }}
-                                        >
-                                            {!isMe && (
-                                                <div style={styles.messageSender}>
-                                                    {username}
-                                                </div>
-                                            )}
-
-                                            <div
-                                                style={{
-                                                    ...styles.messageBubble,
-                                                    ...(isMe
-                                                        ? styles.myBubble
-                                                        : styles.otherBubble)
-                                                }}
-                                            >
-                                                {text}
-                                            </div>
-
-                                            <div style={styles.messageTime}>
-                                                {formatTime(createdAt)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                        <div ref={bottomRef} />
-                    </div>
-
-                    <div style={styles.inputBar}>
-                        <input
-                            type="text"
-                            value={messageText}
-                            onChange={(e) => setMessageText(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                            placeholder="Write a message..."
-                            style={styles.input}
-                        />
-                        <button onClick={handleSend} style={styles.sendButton}>
-                            Send
-                        </button>
-                    </div>
-                </main>
-            </div>
+        <div>
+            {loading ? <p>Loading...</p> : null}
+            {messages.map((msg) => (
+                <div key={msg.id || msg.Id}>
+                    <strong>{msg.username || msg.Username}</strong>:{" "}
+                    {msg.messageText || msg.MessageText}
+                </div>
+            ))}
+            <div ref={bottomRef} />
+            <input
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            />
+            <button onClick={handleSend}>Send</button>
         </div>
     );
 }
-
 const styles = {
     page: {
         minHeight: "100vh",
